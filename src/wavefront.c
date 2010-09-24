@@ -91,9 +91,14 @@ state_v_n (struct wvfo_parser_t *wvps, size_t numcalls, char *buf, size_t bfsz)
 {
 	float *ptr = NULL;
 	size_t num = 0;
-	if (!wvps || !buf || !bfsz) return ERRORE_STUPID;
-	if (numcalls >= 3 && buf) return ERRORE_EXSCESS;
+	// if uncomplite line
 	if (!buf && numcalls < 3) return ERRORE_UNCOMPL;
+	// if overset vertex
+	if (numcalls >= 3 && buf) return ERRORE_EXSCESS;
+	// if stupid ._.
+	if (!wvps || (numcalls != 3 && (!buf || !bfsz))) return ERRORE_STUPID;
+	// if is end line
+	if (numcalls == 3 && !buf) return ERRORE_OK;
 	if (wvps->state == STATE_V)
 	{
 		if (numcalls == 0)
@@ -118,35 +123,83 @@ state_v_n (struct wvfo_parser_t *wvps, size_t numcalls, char *buf, size_t bfsz)
 		else ptr = wvps->vn;
 		num = wvps->vn_num;
 	}
-	if (ptr && num) ptr[num * 3 - 3 + numcalls] = strtof (buf, NULL); 
+	if (ptr && num)
+	   	ptr[num * 3 - 3 + numcalls] = strtof (buf, NULL); 
 	return ERRORE_OK;
 }
 
 int
 state_vt (struct wvfo_parser_t *wvps, size_t numcalls, char *buf, size_t bfsz)
 {
-	if (!wvps || !buf || !bfsz) return ERRORE_STUPID;
 	return ERRORE_OK;
 }
 
 int
 state_f (struct wvfo_parser_t *wvps, size_t numcalls, char *buf, size_t bfsz)
 {
-	if (!wvps || !buf || !bfsz) return ERRORE_STUPID;
+	int32_t v[3] = {0, 0, 0};
+	int c = 0;
+	char *last = NULL;
+	void *tmp = NULL;
+	size_t num = 0;
+	//  face групируется по группам, в каждой группе законченный объект
+	//
+	// значит мы создаем wvfo_f_t, складываем туда набигающие номера v, vn, vt
+	// до тех пор, пока не сменится группа
+	//
+	if (!wvps) return ERRORE_STUPID;
+	// предположительно конец строки
+	if (!buf)
+	{
+		// если это конец строки, то нужно сделать проверку на количество элементов
+		// закрыть структуру и вообще
+		//
+		// получили конец строки, а начала-то не было
+		// или количество строк не соотвествует конечной строке
+		if (!wvps->curr || wvps->curr->len >= numcalls) return ERRORE_UNCOMPL;
+		// иначе всё хорошо и нам требуется добавить текущую группу в список 
+		wvps->curr->next = wvps->f;
+		wvps->f = wvps->curr;
+		wvps->curr = NULL;
+		return ERRORE_OK;
+	}
+	// если нет текущей структуры ._.
+	if (!wvps->curr)
+	{
+		wvps->curr = (struct wvfo_f_t*)calloc (1, sizeof (struct wvfo_f_t));
+		if (!wvps->curr) return ERRORE_NOMEM;
+	}
+	// если это не первый блок в списке и количество элементов строки привышает допустимое
+	// количество
+	if (wvps->curr->num > 1 && wvps->curr->len <= numcalls) return ERRORE_EXSCESS;
+	// пытаемся распарсить строку
+	last = buf;
+	for (c = 0; c < 3; c++)
+	{ 
+		v[c] = strtol (last, &last, 10);
+		if (++last >= buf + bfsz) break;
+	}
+	if (!numcalls)
+	{
+		tmp = realloc (wvps->curr->ptr, sizeof (int32_t) * ((wvps->curr->num + 1) * 3));
+		if (!tmp) return ERRORE_NOMEM;
+		wvps->curr->ptr = (int32_t*)tmp;
+		num = wvps->curr->num;
+		wvps->curr->num++;
+	}
+	memcpy((void*)&(wvps->curr->ptr[num]), (const void*)&v, sizeof (int32_t) * 3);
 	return ERRORE_OK;
 }
 
 int
 state_o (struct wvfo_parser_t *wvps, size_t numcalls, char *buf, size_t bfsz)
 {
-	if (!wvps || !buf || !bfsz) return ERRORE_STUPID;
 	return ERRORE_OK;
 }
 
 int
 state_usemtl (struct wvfo_parser_t *wvps, size_t numcalls, char *buf, size_t bfsz)
 {
-	if (!wvps || !buf || !bfsz) return ERRORE_STUPID;
 	return ERRORE_OK;
 }
 
@@ -193,7 +246,8 @@ wvfo_load (struct wvfo_parser_t *wvps, char *buf, size_t bfsz)
 		{
 			if (wvps->state < STATE_SEEK && state_table[wvps->state].callback)
 			{
-				state_table[wvps->state].callback (wvps, wvps->point++, NULL, 0);
+				wvps->errored = state_table[wvps->state].callback (wvps, wvps->point++, NULL, 0);
+				if (wvps->errored) break;
 			}
 			wvps->cline++;
 			wvps->state = STATE_ZERO;
@@ -262,6 +316,7 @@ wvfo_load (struct wvfo_parser_t *wvps, char *buf, size_t bfsz)
 	}
 	else
 	{
+		model = (struct model_t*)calloc (1, sizeof (struct model_t));
 		// TODO: feel model here
 	}
 	printf ("@ END %u\n", r);

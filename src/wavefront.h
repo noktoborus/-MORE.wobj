@@ -38,7 +38,7 @@ struct wvfo_parser_t
 	float *vn; // vn_num * 3
 
 	struct wvfo_f_t *f;
-	struct wvfo_f_t *last;
+	struct wvfo_f_t *curr;
 	
 	struct model_t *target;
 	// private, tempic
@@ -49,8 +49,10 @@ struct wvfo_parser_t
 
 struct wvfo_f_t
 {
-	size_t num;
-	uint32_t *ptr; // num * 3 {ptr_v, ptr_vt, ptr_vn}
+	// unit size == (sizeof (int32_t) * 3)
+	size_t len; // len of line (* unit size))
+	size_t num; // size of array (* (len * unit size))
+	int32_t *ptr;
 	struct wvfo_f_t *next;
 };
 
