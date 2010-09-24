@@ -10,6 +10,8 @@
 struct model_polly_t
 {
 	uint8_t use;
+	// arrays size (in units: (sizeof (units) == sizeof (float) * 3))
+	//  ({x,y,z} or {u,v,w} if texture)
 	size_t num;
 	// :3
 	// vertex, normal, texture
@@ -22,7 +24,7 @@ void mpolly_free (struct model_polly_t *polly);
 struct model_t
 {
 	size_t pollys_num;
-	struct model_polly_t *pollys;
+	struct model_polly_t **pollys;
 };
 
 // ok
@@ -40,7 +42,7 @@ struct wvfo_parser_t
 	struct wvfo_f_t *f;
 	struct wvfo_f_t *curr;
 	
-	struct model_t *target;
+	struct model_t *model;
 	// private, tempic
 	int errored;
 	size_t cline;
@@ -49,8 +51,9 @@ struct wvfo_parser_t
 
 struct wvfo_f_t
 {
+	uint8_t use;
 	// unit size == (sizeof (int32_t) * 3)
-	size_t len; // len of line (* unit size))
+	size_t len; // count of vertex groups (* unit size))
 	size_t num; // size of array (* (len * unit size))
 	int32_t *ptr;
 	struct wvfo_f_t *next;

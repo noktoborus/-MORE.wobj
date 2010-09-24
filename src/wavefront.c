@@ -156,11 +156,13 @@ state_f (struct wvfo_parser_t *wvps, size_t numcalls, char *buf, size_t bfsz)
 		//
 		// получили конец строки, а начала-то не было
 		// или количество строк не соотвествует конечной строке
-		if (!wvps->curr || wvps->curr->len >= numcalls) return ERRORE_UNCOMPL;
-		// иначе всё хорошо и нам требуется добавить текущую группу в список 
-		wvps->curr->next = wvps->f;
-		wvps->f = wvps->curr;
-		wvps->curr = NULL;
+		if (!wvps->curr || wvps->curr->len > numcalls) return ERRORE_UNCOMPL;
+		//// иначе всё хорошо и нам требуется добавить текущую группу в список 
+		//// fix: добавить это надо не сдесь, т.е. вносить изменения в очёредность требуется в
+		//// fix: state_g, т.е. при смене группы, а не окончания строки с f(ace)
+		//wvps->curr->next = wvps->f;
+		//wvps->f = wvps->curr;
+		//wvps->curr = NULL;
 		return ERRORE_OK;
 	}
 	// если нет текущей структуры ._.
@@ -168,15 +170,35 @@ state_f (struct wvfo_parser_t *wvps, size_t numcalls, char *buf, size_t bfsz)
 	{
 		wvps->curr = (struct wvfo_f_t*)calloc (1, sizeof (struct wvfo_f_t));
 		if (!wvps->curr) return ERRORE_NOMEM;
+		// раметили, а теперь вносим в список
+		wvps->curr->next = wvps->f;
+		wvps->f = wvps->curr;
 	}
 	// если это не первый блок в списке и количество элементов строки привышает допустимое
 	// количество
+	printf ("@@ %d %d\n", wvps->curr->num, wvps->curr->len);
 	if (wvps->curr->num > 1 && wvps->curr->len <= numcalls) return ERRORE_EXSCESS;
 	// пытаемся распарсить строку
 	last = buf;
 	for (c = 0; c < 3; c++)
-	{ 
+	{
 		v[c] = strtol (last, &last, 10);
+		// если это первый блок в списке и число было получено
+		if (wvps->curr->num < 2 && v[c]) 
+		{
+			switch (c)
+			{
+				case 0:
+					wvps->curr->use |= MPOLLY_USE_VERTEX;
+					break;
+				case 1:
+					wvps->curr->use |= MPOLLY_USE_TEXTUR;
+					break;
+				case 2:
+					wvps->curr->use |= MPOLLY_USE_NORMAL;
+					break;
+			}
+		}
 		if (++last >= buf + bfsz) break;
 	}
 	if (!numcalls)
@@ -185,9 +207,14 @@ state_f (struct wvfo_parser_t *wvps, size_t numcalls, char *buf, size_t bfsz)
 		if (!tmp) return ERRORE_NOMEM;
 		wvps->curr->ptr = (int32_t*)tmp;
 		num = wvps->curr->num;
+		printf ("INC\n"); 
 		wvps->curr->num++;
 	}
 	memcpy((void*)&(wvps->curr->ptr[num]), (const void*)&v, sizeof (int32_t) * 3);
+	// если это первая строка - инкрементируем, вся группа f должна ровнять по первому элементу
+	// или требуется пересмотреть весь алгоритм, как мне кажется второе более логично
+	// но первое проще для реализации ._.
+	if (wvps->curr->num < 2) wvps->curr->len++;
 	return ERRORE_OK;
 }
 
@@ -219,10 +246,97 @@ struct state_table_t
 	{"STATE_SEEK", NULL},
 };
 
+static inline int
+wvfo_model_build (struct wvfo_parser_t *wvps)
+{
+	void *tmp;
+	struct wvfo_f_t *f;
+	size_t fnum;
+	size_t c;
+	size_t nc;
+	printf ("@ BUILD MODEL\n");
+	if (!wvps->model)
+		wvps->model = (struct model_t*)calloc (1, sizeof (struct model_t));
+	if (!wvps->model) return ERRORE_NOMEM;
+	if (wvps->f_num != wvps->model->pollys_num && wvps->model->pollys)
+	{
+		free (wvps->model->pollys);
+		wvps->model->pollys = NULL;
+		wvps->model->pollys_num = 0;
+	}
+	if (wvps->f_num && !wvps->model->pollys)
+	{
+		tmp = realloc ((void*)wvps->model->pollys, (sizeof (struct model_polly_t*) * wvps->f_num));
+		if (!tmp) return ERRORE_NOMEM;
+		wvps->model->pollys = (struct model_polly_t**)tmp;
+		while (wvps->model->pollys_num < wvps->f_num)
+		{
+			 wvps->model->pollys[wvps->model->pollys_num++] = NULL;
+		}
+	}
+	if (wvps->f_num)
+	{
+		wvps->model->pollys_num = wvps->f_num;
+		fnum = wvps->f_num;
+		f = wvps->f;
+		// не забываем, что список wvps->f "перевёрнут"
+		while (fnum--)
+		{
+			nc = 0;
+			if (f->use & MPOLLY_USE_VERTEX) nc++;
+			if (f->use & MPOLLY_USE_TEXTUR) nc++;
+			if (f->use & MPOLLY_USE_NORMAL) nc++;
+			c = 0;
+			if (wvps->model->pollys[fnum])
+			{
+				if (wvps->model->pollys[fnum]->use & MPOLLY_USE_VERTEX) c++;
+				if (wvps->model->pollys[fnum]->use & MPOLLY_USE_TEXTUR) c++;
+				if (wvps->model->pollys[fnum]->use & MPOLLY_USE_NORMAL) c++;
+			}
+			// проверка на необходимость переразметки структуры
+			if (c != nc)
+			{
+				if (c > nc)
+				{
+					while (c-- > nc)
+					{
+					   	free (wvps->model->pollys[fnum]->vertex[c]);
+						wvps->model->pollys[fnum]->vertex[c] = NULL;
+					}
+				}
+				tmp = realloc ((void*)wvps->model->pollys[fnum],\
+					   	sizeof (struct model_polly_t) + sizeof (float*) * nc?(nc - 1):0);
+				if (!tmp) return ERRORE_NOMEM;
+				wvps->model->pollys[fnum] = (struct model_polly_t*)tmp;
+				wvps->model->pollys[fnum]->use = f->use;
+				if (c < nc)
+				{
+					while (c++ < nc)
+					{
+						wvps->model->pollys[fnum]->vertex[c] = NULL;
+					}
+				}
+				c = nc;
+			}
+			// тот же фокус, только с количеством групп в списках
+			if (f->len != wvps->model->pollys[fnum]->num)
+			{
+
+			}
+			// заполняем списки
+			
+			// проверяем, есть ли куда двигаться дальше, иначе выходим из цикла
+			if (!(f = f->next)) break;
+		}
+	}
+	// TODO: feel model
+	printf ("@ BUILD OK\n");
+	return 0;
+}
+
 struct model_t *
 wvfo_load (struct wvfo_parser_t *wvps, char *buf, size_t bfsz)
 {
-	struct model_t *model = NULL;
 	// num of state calls
 	wvps->point = 0;
 	// line count
@@ -312,14 +426,13 @@ wvfo_load (struct wvfo_parser_t *wvps, char *buf, size_t bfsz)
 		printf ("WVPS: %d (%s) line %d point %d (%s:%p)\n", wvps->errored,\
 			   	error_table[wvps->errored], wvps->cline, wvps->point,\
 			   	state_table[wvps->state].name, (void*)&(state_table[wvps->state].callback));
-		// TODO: free all here
+		// TODO: free () all
 	}
 	else
 	{
-		model = (struct model_t*)calloc (1, sizeof (struct model_t));
-		// TODO: feel model here
+		wvps->errored = wvfo_model_build (wvps);
 	}
 	printf ("@ END %u\n", r);
-	return model;
+	return wvps->model;
 }
 
