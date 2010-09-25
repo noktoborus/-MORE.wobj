@@ -10,8 +10,13 @@
 struct model_polly_t
 {
 	uint8_t use;
-	// arrays size (in units: (sizeof (units) == sizeof (float) * 3))
-	//  ({x,y,z} or {u,v,w} if texture)
+	// sizeof (unit) == sizeof (float) * 3
+	//
+	// sizeof (len) == sizeof(unit) * n
+	// где n - количество элементов в одной строке
+	size_t len;
+	// sizeof (num) == sizeof (len) * n
+	// где n - количество строк
 	size_t num;
 	// :3
 	// vertex, normal, texture
@@ -34,10 +39,12 @@ struct wvfo_parser_t
 	int state;
 	size_t v_num;
 	size_t vn_num;
+	size_t vt_num;
 	size_t f_num;
 	
 	float *v; // v_num * 3
 	float *vn; // vn_num * 3
+	float *vt;
 
 	struct wvfo_f_t *f;
 	struct wvfo_f_t *curr;
