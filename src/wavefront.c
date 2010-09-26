@@ -1,6 +1,7 @@
-#include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#define __USE_BSD 1
+#include <string.h>
 
 #include "wavefront.h"
 
@@ -49,6 +50,7 @@ enum error_enume_t
 {
 	ERRORE_OK,
 	ERRORE_STUPID,
+	ERRORE_SUICIDE,
 	ERRORE_KEYP,
 	ERRORE_UKEY,
 	ERRORE_NOMEM,
@@ -62,6 +64,7 @@ char *error_table[] =
 {
 	"All Good",
 	"Unknown error",
+	"Kill self, because I suck"
 	"Unknown key parse error",
 	"Unknown key",
 	"Need more free memory",
@@ -134,6 +137,7 @@ state_v_n (struct wvfo_parser_t *wvps, size_t numcalls, char *buf, size_t bfsz)
 int
 state_vt (struct wvfo_parser_t *wvps, size_t numcalls, char *buf, size_t bfsz)
 {
+	// с vt всё сложнее, т.к. может быть от 2 до 3 значений в юните
 	return ERRORE_OK;
 }
 
@@ -141,102 +145,71 @@ int
 state_f (struct wvfo_parser_t *wvps, size_t numcalls, char *buf, size_t bfsz)
 {
 	int32_t v[3] = {0, 0, 0};
-	int c = 0;
 	char *last = NULL;
 	void *tmp = NULL;
-	size_t num = 0;
-	//  face групируется по группам, в каждой группе законченный объект
-	//
-	// значит мы создаем wvfo_f_t, складываем туда набигающие номера v, vn, vt
-	// до тех пор, пока не сменится группа
-	//
-	if (!wvps) return ERRORE_STUPID;
-	// предположительно конец строки
+	int c = 0;
+	if (!wvps || !wvps->o) return ERRORE_STUPID;
+	if (!numcalls && !buf) return ERRORE_EXSCESS;
+	if (numcalls && !wvps->f_curr) return ERRORE_STUPID;
 	if (!buf)
 	{
-		// если это конец строки, то нужно сделать проверку на количество элементов
-		// закрыть структуру и вообще
-		//
-		// получили конец строки, а начала-то не было
-		// или количество строк не соотвествует конечной строке
-		if (!wvps->curr || wvps->curr->len > numcalls) return ERRORE_UNCOMPL;
-		//// иначе всё хорошо и нам требуется добавить текущую группу в список 
-		//// fix: добавить это надо не сдесь, т.е. вносить изменения в очёредность требуется в
-		//// fix: state_g, т.е. при смене группы, а не окончания строки с f(ace)
-		//wvps->curr->next = wvps->f;
-		//wvps->f = wvps->curr;
-		//wvps->curr = NULL;
-		return ERRORE_OK;
+		if (wvps->f_curr)
+		{
+			wvps->f_curr->next = wvps->f;
+			wvps->f = wvps->f_curr;
+			wvps->f_curr = NULL;
+			return ERRORE_OK;
+		}
+		return ERRORE_STUPID;
 	}
-	// если нет текущей структуры ._.
-	if (!wvps->curr)
+	if (!wvps->f_curr)
 	{
-		wvps->curr = (struct wvfo_f_t*)calloc (1, sizeof (struct wvfo_f_t));
-		if (!wvps->curr) return ERRORE_NOMEM;
-		// раметили, а теперь вносим в список
-		wvps->curr->next = wvps->f;
-		wvps->f = wvps->curr;
-		wvps->f_num++;
+		wvps->f_curr = (struct wvfo_f_t*)calloc (1, sizeof (struct wvfo_f_t));
+		if (!wvps->f_curr) return ERRORE_NOMEM;
 	}
-	// если это не первый блок в списке и количество элементов строки привышает допустимое
-	// количество
-	if (wvps->curr->num > 1 && wvps->curr->len <= numcalls) return ERRORE_EXSCESS;
 	// пытаемся распарсить строку
 	last = buf;
-	for (c = 0; c < 3; c++)
+	for (c = 0; c < 3 && last < buf + bfsz; c++, last++)
 	{
 		v[c] = strtol (last, &last, 10);
-		// если это первый блок в списке и число было получено
-		if (wvps->curr->num < 2 && v[c]) 
+		if (v[c])
 		{
 			switch (c)
 			{
 				case 0:
-					wvps->curr->use |= MPOLLY_USE_VERTEX;
+					wvps->o->use |= MPOLLY_USE_VERTEX;
 					break;
 				case 1:
-					wvps->curr->use |= MPOLLY_USE_TEXTUR;
+					wvps->o->use |= MPOLLY_USE_TEXTUR;
 					break;
 				case 2:
-					wvps->curr->use |= MPOLLY_USE_NORMAL;
+					wvps->o->use |= MPOLLY_USE_NORMAL;
 					break;
 			}
 		}
-		if (++last >= buf + bfsz) break;
 	}
-	if (!numcalls || wvps->curr->len == numcalls)
-	{
-		c = 0;
-		if (wvps->curr->len == numcalls)
-		{
-			c = sizeof (v) * (wvps->curr->len + 1);
-		}
-		else
-		{
-			c = sizeof (v) * wvps->curr->len * (wvps->curr->num + 1);
-		}
-		tmp = realloc (wvps->curr->ptr, c);
-		if (!tmp) return ERRORE_NOMEM;
-		wvps->curr->ptr = (int32_t*)tmp;
-		num = wvps->curr->num;
-		if (numcalls == wvps->curr->len) wvps->curr->len++;
-		if (!numcalls) wvps->curr->num++;
-	}
-	// если это первая строка - инкрементируем, вся группа f должна ровнять по первому элементу
-	// или требуется пересмотреть весь алгоритм, как мне кажется второе более логично
-	// но первое проще для реализации ._.
-	// бряк
-	c = 0;
-	if (wvps->curr->num == 1) c = numcalls * 3;
-	else
-		c = ((wvps->curr->len * 3) * wvps->curr->num) - wvps->curr->len * 3 + numcalls * 3;
-	memcpy ((void*)&((wvps->curr->ptr)[c]), (const void*)v, sizeof (v));
+	// переразмечаем пространство под список
+	tmp = realloc (wvps->f_curr->ptr, sizeof (v) * (wvps->f_curr->len + 1));
+	if (!tmp) return ERRORE_NOMEM;
+	wvps->f_curr->ptr = (int32_t*)tmp;
+	// и кладём туда своё значение
+	memcpy ((void*)&(wvps->f_curr->ptr[wvps->f_curr->len * 3]), (const void*)&v, sizeof (v));
+	wvps->f_curr->len++;
+	if (!numcalls) wvps->o->fcount++;
 	return ERRORE_OK;
 }
 
 int
 state_o (struct wvfo_parser_t *wvps, size_t numcalls, char *buf, size_t bfsz)
 {
+	struct wvfo_o_t *o;
+	if (!wvps) return ERRORE_STUPID;
+	if (!buf) return ERRORE_OK;
+	o = (struct wvfo_o_t*)calloc (1, sizeof (struct wvfo_o_t));
+	if (!o) return ERRORE_NOMEM;
+	o->next = wvps->o;
+	wvps->o = o;
+	if (!(o->name = strdup (buf))) return ERRORE_NOMEM;
 	return ERRORE_OK;
 }
 
@@ -265,13 +238,134 @@ struct state_table_t
 static inline int
 wvfo_model_build (struct wvfo_parser_t *wvps)
 {
+	struct wvfo_f_t *f = NULL;
+	size_t pollyn = 0;
+	size_t fplen = 0;
+	void *tmp = NULL;
+	int nc = 0;
+	int c = 0;
+	int _tf = 0;
+	if (!wvps || !wvps->o || (wvps->o->fcount > 0 && !wvps->f))
+	   	return ERRORE_STUPID;
+	if (!wvps->model)
+	{
+		wvps->model = (struct model_t*)calloc (1, sizeof (struct model_t));
+		if (!wvps->model) return ERRORE_NOMEM;
+	}
+	if (wvps->o->name != NULL && wvps->model->name == NULL)
+	{
+		wvps->model->name = wvps->o->name;
+		wvps->o->name = NULL;
+	}
+	while (wvps->o->fcount-- && (f = wvps->f))
+	{
+		// если длина блока полли не равна длине текущего блока
+		if (fplen != f->len || fplen == 0)
+		{
+			pollyn = 0;
+			// поиск нужного указателля на полли
+			if (wvps->model->pollys)
+			{
+				do
+				{
+					// если нашли пустой слот
+					if (!wvps->model->pollys[pollyn]) break;
+					// если нашли нашу полли (с нужным размером блока)
+					if (wvps->model->pollys[pollyn]->len == f->len) break;
+				}
+				while (pollyn++);
+			}
+			// если длина нулевая, или не нашли нужную полли
+			// нужно разметить память
+			if (pollyn == wvps->model->pollys_num)
+			{
+				printf ("REAC 1\n");
+				tmp = realloc ((void*)wvps->model->pollys,\
+					   	sizeof (struct model_polly_t*) * (pollyn + 1));
+				if (!tmp) return ERRORE_NOMEM;
+				wvps->model->pollys = (struct model_polly_t**)tmp;
+				// занялуем память
+				wvps->model->pollys[pollyn] = NULL;
+				// увеличиваем счётчик полли
+				wvps->model->pollys_num++;
+			}
+			// если слот пустой
+			if (!wvps->model->pollys[pollyn])
+			{
+				nc = 0;
+				// считаем какой размер структуры нам нужен
+				if (wvps->o->use & MPOLLY_USE_VERTEX) nc++;
+				if (wvps->o->use & MPOLLY_USE_TEXTUR) nc++;
+				if (wvps->o->use & MPOLLY_USE_TEXTUR) nc++;
+				// если нет вертексов, если НИЧЕГО НЕТ
+				if (!nc) return ERRORE_SUICIDE;
+				// пытаемся заполнить слот
+				// выделяем память под стуктуру + небольшой хвост из 1-2 float*, если требуется
+				// (под первый float* память выделяется при выделении под model_polly_t)) 
+				tmp = calloc (1, sizeof (struct model_polly_t) + sizeof (float*) * (nc - 1));
+				// памяти не хватило
+				if (!tmp) return ERRORE_NOMEM;
+				wvps->model->pollys[pollyn] = (struct model_polly_t*)tmp;
+				// заполняем некоторые основные поля
+				wvps->model->pollys[pollyn]->use = wvps->o->use;
+				wvps->model->pollys[pollyn]->len = f->len;
+			}
+			// ня
+			fplen = f->len;
+		}
+		if (wvps->model->pollys_num < pollyn || fplen != f->len) return ERRORE_SUICIDE;
+		// перераспределяем память под новый узел
+		nc = 0;
+		if (wvps->o->use & MPOLLY_USE_VERTEX) nc++;
+		if (wvps->o->use & MPOLLY_USE_TEXTUR) nc++;
+		if (wvps->o->use & MPOLLY_USE_NORMAL) nc++;
+		// указатель на нужный блок (до переразметки - указатель на конец массива)
+		c = wvps->model->pollys[pollyn]->num * fplen * sizeof (float) * 3;
+		if (!nc) return ERRORE_SUICIDE;
+		while (nc--)
+		{
+			tmp = realloc ((void*)wvps->model->pollys[pollyn]->vertex[nc], c + (fplen * sizeof (float) * 3));
+			if (!tmp) return ERRORE_NOMEM;
+			// подчищаем память
+			memset ((void*)&(((char*)tmp)[c]), 0, (fplen * sizeof (float) * 3));
+			// заполняем базовые поля
+			wvps->model->pollys[pollyn]->vertex[nc] = (float*)tmp;
+			wvps->model->pollys[pollyn]->num++;
+		}
+		// FF
+		c = wvps->model->pollys[pollyn]->num * f->len * 3;
+		_tf = 0;
+		fplen = -1;
+		while (++fplen < f->len)
+		{
+			nc = 0;
+			if (wvps->o->use & MPOLLY_USE_VERTEX)
+			{
+				if (f->ptr[fplen * 3] < 0)
+					_tf = ((wvps->v_num - f->ptr[fplen * 3]) - 1);
+				else _tf = (f->ptr[fplen * 3] - 1);
+				if (_tf >= 0 && _tf < wvps->v_num)
+				{
+					_tf *= 3;
+					wvps->model->pollys[pollyn]->vertex[nc][c - fplen * 3 - 3] = wvps->v[_tf + 0];
+					wvps->model->pollys[pollyn]->vertex[nc][c - fplen * 3 - 2] = wvps->v[_tf + 1];
+					wvps->model->pollys[pollyn]->vertex[nc][c - fplen * 3 - 1] = wvps->v[_tf + 2];
+				}
+				nc++;
+			}
+		}
+		// end while
+		wvps->f = f->next;
+		free (f);
+		f = NULL;
+	}
+	/*
 	void *tmp;
 	struct wvfo_f_t *f;
 	size_t fnum;
 	size_t c;
 	size_t nc;
 	int32_t _tf;
-	printf ("@ BUILD MODEL\n");
 	if (!wvps->model)
 	{
 		wvps->model = (struct model_t*)calloc (1, sizeof (struct model_t));
@@ -415,8 +509,8 @@ wvfo_model_build (struct wvfo_parser_t *wvps)
 		}
 	}
 	// TODO: feel model
-	printf ("@ BUILD OK\n");
-	return 0;
+	*/
+	return ERRORE_OK;
 }
 
 struct model_t *
@@ -455,14 +549,16 @@ wvfo_load (struct wvfo_parser_t *wvps, char *buf, size_t bfsz)
 		else
 		if (wvps->state == STATE_ZERO)
 		{
-			wvps->point = ERRORE_OK;
+			wvps->point = 0;
+			if (buf[r] == '#')
+			{
+				wvps->state = STATE_SEEK;
+			}
+			else
 			if (sz == 1)
 			{
 				switch (buf[r])
 				{
-					case '#':
-						wvps->state = STATE_SEEK;
-						break;
 					case 'v':
 						wvps->state = STATE_V;
 						break;
@@ -512,43 +608,22 @@ wvfo_load (struct wvfo_parser_t *wvps, char *buf, size_t bfsz)
 		printf ("WVPS: %d (%s) line %d point %d (%s:%p)\n", wvps->errored,\
 			   	error_table[wvps->errored], wvps->cline, wvps->point,\
 			   	state_table[wvps->state].name, (void*)&(state_table[wvps->state].callback));
+		printf ("`%s\"\n", &buf[r]);
 		// TODO: free () all
 	}
 	else
 	{
-		int s = 0;
-		int g = 0;
-		s = wvps->f->num;
-		g = wvps->f->len;
-		printf ("len: %d %d\n", s, g);
-		s *= g * 3;
-		printf ("cc: %d\n", s);
-		for (g = 0; g < s; g++)
-		{
-			if (!(g % 3)) printf ("| ");
-			printf ("%d ", wvps->f->ptr[g]);
-		}
-		printf ("\n");
-		for (s = 0; s < wvps->f->num; s++)
-		{
-			printf ("f ");
-			for (g = 0; g < wvps->f->len; g++)
-			{
-			//	printf ("%d ", s * (wvps->f->len * 3) + (g * 3));
-				printf ("%d ", wvps->f->ptr[s * (wvps->f->len * 3) + (g * 3)]);
-			}
-			printf ("\n");
-		}
-		s = wvps->v_num;
-		printf ("num = \"%d\"\n", s);
-		for (g = 0; g < s; g++)
-		{
-			printf ("v(%d): %f %f %f\n", g + 1, wvps->v[g * 3], wvps->v[g * 3 + 1], wvps->v[g * 3 + 2]);
-		}
+		printf ("@ v=`%d'\n", wvps->v_num);
+		printf ("@@ name=`%s' fcount=`%d'\n", wvps->o->name, wvps->o->fcount);
+		printf ("@@@ USE_VERTEX = %d\n", wvps->o->use & MPOLLY_USE_VERTEX);
+		printf ("@@@ USE_TEXTUR = %d\n", wvps->o->use & MPOLLY_USE_TEXTUR);
+		printf ("@@@ USE_NORMAL = %d\n", wvps->o->use & MPOLLY_USE_NORMAL);
+		printf ("@@@ BUILD MODEL\n");
 		if((wvps->errored = wvfo_model_build (wvps)) == ERRORE_OK)
 		{
 			model = wvps->model;
 			wvps->model = NULL;
+			printf ("@ BUILD OK\n");
 			return model;
 		}
 	}

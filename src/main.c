@@ -9,27 +9,10 @@
 
 #include "wavefront.h"
 
-#define WVOBJFILE "rez/model00.obj"
+#define WVOBJFILE "rez/model02.obj"
 #define CHUNK_SZ 1024
 
-GLfloat colors[] = {1,1,1,  1,1,0,  1,0,0,  1,0,1,              // v0-v1-v2-v3
-                    1,1,1,  1,0,1,  0,0,1,  0,1,1,              // v0-v3-v4-v5
-                    1,1,1,  0,1,1,  0,1,0,  1,1,0,              // v0-v5-v6-v1
-                    1,1,0,  0,1,0,  0,0,0,  1,0,0,              // v1-v6-v7-v2
-                    0,0,0,  0,0,1,  1,0,1,  1,0,0,              // v7-v4-v3-v2
-                    0,0,1,  0,0,0,  0,1,0,  0,1,1};             // v4-v7-v6-v5
-
-// vertex coords array
-GLfloat vertices[] = {1,1,1,  -1,1,1,  -1,-1,1,  1,-1,1,        // v0-v1-v2-v3
-                      1,1,1,  1,-1,1,  1,-1,-1,  1,1,-1,        // v0-v3-v4-v5
-                      1,1,1,  1,1,-1,  -1,1,-1,  -1,1,1,        // v0-v5-v6-v1
-                      -1,1,1,  -1,1,-1,  -1,-1,-1,  -1,-1,1,    // v1-v6-v7-v2
-                      -1,-1,-1,  1,-1,-1,  1,-1,1,  -1,-1,1,    // v7-v4-v3-v2
-                      1,-1,-1,  -1,-1,-1,  -1,1,-1,  1,1,-1};   // v4-v7-v6-v5
-
-
-
-GLfloat LPOS[] = {0.0f, 0.0f, 20.0f, 1.0f};
+GLfloat LPOS[] = {0.0f, 4.0f, 15.0f, 1.0f};
 GLfloat LAMB[] = {0.2f, 0.2f, 0.2f, 1.0f};
 GLfloat LDIF[] = {0.7f, 0.7f, 0.7f, 1.0f};
 GLfloat LSPE[] = {1.0f, 1.0f, 1.0f, 1.0f};
@@ -40,33 +23,20 @@ display ()
 {
 	glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glPushMatrix ();
-		glTranslatef (0.0f, 0.0f, -7.0f);
+		glTranslatef (0.0f, 0.0f, -3.0f);
 		glPolygonMode (GL_FRONT_AND_BACK, GL_LINE);
-		// cube 1
 		glPushMatrix ();
-			glTranslatef (2.0f, 0.0f, 0.0f);
+			glRotatef (95.0f, 1.0f, 0.0f, 0.0f);
+			glColor3f (1.0f, 0.7f, 0.0f);
 
 			glEnableClientState (GL_VERTEX_ARRAY);
-			glEnableClientState (GL_COLOR_ARRAY);
 
-			glColorPointer (3, GL_FLOAT, 0, colors);
 			glVertexPointer (3, GL_FLOAT, 0, model->pollys[0]->vertex[0]);
-			glDrawArrays (GL_QUADS, 0, 24);
 
-			glDisableClientState (GL_VERTEX_ARRAY);
-			glDisableClientState (GL_COLOR_ARRAY);
-		glPopMatrix ();
-		// cube 2
-		glPushMatrix ();
-			glTranslatef (-2.0f, 0.0f, 0.0f);
-			glEnableClientState (GL_VERTEX_ARRAY);
-			glEnableClientState (GL_COLOR_ARRAY);
+			//glDrawArrays (GL_LINES, 0, CC);
+			//glDrawArrays (GL_LINES, 0, model->pollys[0]->num * model->pollys[0]->len);
+			glDrawArrays (GL_QUADS, 0, model->pollys[0]->num * model->pollys[0]->len);
 
-			glColorPointer (3, GL_FLOAT, 0, colors);
-			glVertexPointer (3, GL_FLOAT, 0, vertices);
-			glDrawArrays (GL_QUADS, 0, 24);
-
-			glDisableClientState (GL_COLOR_ARRAY);
 			glDisableClientState (GL_VERTEX_ARRAY);
 		glPopMatrix ();
 	glPopMatrix ();
@@ -93,6 +63,11 @@ timerP (int val)
 {
 	glutPostRedisplay ();
 	glutTimerFunc (val, timerP, val);
+}
+
+void
+key (unsigned char key, int x, int y)
+{
 }
 
 void
@@ -150,13 +125,13 @@ main (int argc, char *argv[])
 			{
 				printf ("# POLLY #%d polygons count: %d with vertexes: %d\n",\
 					   	re, model->pollys[re]->num, model->pollys[re]->len);
-				printf ("SZ: %d\n## ", sz);
 				for (sz = 0; sz < model->pollys[re]->num * model->pollys[re]->len * 3; sz++)
 				{
 					if (!(sz % (model->pollys[re]->len * 3))) printf ("\n");
 					if (!(sz % 3)) printf ("| ");
 					printf ("%2.1f ", model->pollys[re]->vertex[0][sz]);
 				}
+				printf ("\nSZ: %d\n## ", sz);
 				printf ("\n##\n");
 		/*		if (model->pollys[re]->num && model->pollys[re]->len)
 				{
@@ -191,17 +166,21 @@ main (int argc, char *argv[])
 		glutReshapeFunc (resize);
 		glutMotionFunc (motion);
 		glutMouseFunc (mouse);
+		glutKeyboardFunc (key);
+
 		glutTimerFunc (10, timerP, 10);
 		// GL init
 		glClearColor (0.0f, 0.0f, 0.0f, 0.0f);
 		glClearDepth (1.0f);
 		glEnable (GL_LIGHTING);
-		glEnable (GL_LIGHT0);
-		glLightfv (GL_LIGHT0, GL_AMBIENT, LAMB);
-		glLightfv (GL_LIGHT0, GL_SPECULAR, LSPE);
-		glLightfv (GL_LIGHT0, GL_DIFFUSE, LDIF);
+		//glLightfv (GL_LIGHT0, GL_AMBIENT, LAMB);
+		//glLightfv (GL_LIGHT0, GL_SPECULAR, LSPE);
+		//glLightfv (GL_LIGHT0, GL_DIFFUSE, LDIF);
 		glLightfv (GL_LIGHT0, GL_POSITION, LPOS);
+		glEnable (GL_LIGHT0);
 		glEnable (GL_COLOR_MATERIAL);
+		glEnable (GL_DEPTH_TEST);
+		glDisable (GL_CULL_FACE);
 		glColorMaterial (GL_FRONT, GL_AMBIENT_AND_DIFFUSE);
 		glShadeModel (GL_SMOOTH);
 		// run

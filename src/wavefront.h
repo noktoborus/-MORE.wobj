@@ -38,6 +38,7 @@ void mpolly_free (struct model_polly_t *polly);
 
 struct model_t
 {
+	char *name;
 	size_t pollys_num;
 	struct model_polly_t **pollys;
 };
@@ -50,14 +51,16 @@ struct wvfo_parser_t
 	size_t v_num;
 	size_t vn_num;
 	size_t vt_num;
-	size_t f_num;
+	size_t o_num;
 	
 	float *v; // v_num * 3
 	float *vn; // vn_num * 3
 	float *vt;
 
+	struct wvfo_o_t *o;
+
 	struct wvfo_f_t *f;
-	struct wvfo_f_t *curr;
+	struct wvfo_f_t *f_curr;
 	
 	struct model_t *model;
 	// private, tempic
@@ -66,12 +69,18 @@ struct wvfo_parser_t
 	size_t point;
 };
 
+struct wvfo_o_t
+{
+	char *name;
+	size_t fcount;
+	uint8_t use;
+	struct wvfo_o_t *next;
+};
+
 struct wvfo_f_t
 {
-	uint8_t use;
 	// unit size == (sizeof (int32_t) * 3)
 	size_t len; // count of vertex groups (* unit size))
-	size_t num; // size of array (* (len * unit size))
 	int32_t *ptr;
 	struct wvfo_f_t *next;
 };
