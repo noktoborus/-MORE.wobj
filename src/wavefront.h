@@ -4,6 +4,16 @@
 #include <stdlib.h>
 
 // not in here
+/// MPOLLY_VEX:
+//		model_polly_t *P; // pointer to model_polly_t
+//		size_t VL; // number of array (vertex, normal, texture (model_polly_t.vertex[VL])) 
+//		size_t LINE; // number of line ( < model_polly_t.num)
+//		size_t COL; // number of vertex group ( < model_polly_t.len)
+//		size_t POINT; // num of point in vertex group (< 3)
+#define MPOLLY_VEX(P, VL, LINE, COL, POINT) \
+	((P != NULL && LINE < P->num && COL < P->len && POINT < 3)?\
+		(P->vertex[VL][LINE * 3 * P->len + COL * 3 + POINT]):0.0f)
+
 #define MPOLLY_USE_VERTEX 1
 #define MPOLLY_USE_TEXTUR 2
 #define MPOLLY_USE_NORMAL 4

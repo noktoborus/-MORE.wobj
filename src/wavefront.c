@@ -353,61 +353,65 @@ wvfo_model_build (struct wvfo_parser_t *wvps)
 						wvps->model->pollys[fnum]->vertex[c] = NULL;
 					}
 					wvps->model->pollys[fnum]->vertex[c] =\
-					   	(float*)calloc (1, sizeof (float) * (f->len * 3));
+					   	(float*)calloc (1, sizeof (float) * (f->num * f->len * 3));
 					if (!wvps->model->pollys[fnum]->vertex[c])
 						return ERRORE_NOMEM;
 				}
 				wvps->model->pollys[fnum]->len = f->len;
 				wvps->model->pollys[fnum]->num = f->num;
 			}
+			_tf = 2;
 			// заполняем списки
-			for (nc = 0; nc < f->len * f->num; nc++)
+			for (nc = 0; nc < f->len * f->num; nc /= 3, nc++)
 			{
-				if (!f->ptr[nc]) continue;
+				nc *= 3;
 				c = 0;
-				if (f->use & MPOLLY_USE_VERTEX)
+				if (f->ptr[nc] && f->use & MPOLLY_USE_VERTEX)
 				{
 					if (f->ptr[nc] < 0)
-						_tf = wvps->v_num - f->ptr[nc];
-					else _tf = f->ptr[nc];
-					//printf ("^ %d %d\n", nc, f->ptr[1]);
-					if (_tf > 0 && _tf < wvps->v_num)
+						_tf = ((wvps->v_num - f->ptr[nc]) - 1) * 3;
+					else _tf = (f->ptr[nc] - 1) * 3;
+					//_tf = (_tf - 1);
+					if (_tf >= 0 && _tf < (wvps->v_num * 3))
 					{
-						_tf = (_tf - 1) * 3;
 						wvps->model->pollys[fnum]->vertex[c][nc] = wvps->v[_tf];
 						wvps->model->pollys[fnum]->vertex[c][nc + 1] = wvps->v[_tf + 1];
 						wvps->model->pollys[fnum]->vertex[c][nc + 2] = wvps->v[_tf + 2];
 					}
+					else
+						printf ("E %d %d\n", nc, _tf);
 					c++;
 				}
-				if (f->use & MPOLLY_USE_TEXTUR)
+				if (f->ptr[nc + 1] && f->use & MPOLLY_USE_TEXTUR)
 				{
-					if (f->ptr[nc] < 0)
-						_tf = wvps->vt_num - f->ptr[nc];
-					else _tf = f->ptr[nc];
-					if (_tf > 0 && _tf < wvps->vt_num)
+					if (f->ptr[nc + 1] < 0)
+						_tf = ((wvps->vt_num - f->ptr[nc + 2]) - 1) * 3;
+					else _tf = (f->ptr[nc + 1] - 1) * 3;
+					if (_tf >= 0 && _tf < wvps->vt_num)
 					{
-						_tf = (_tf - 1) * 3;
 						wvps->model->pollys[fnum]->vertex[c][nc] = wvps->vt[_tf];
 						wvps->model->pollys[fnum]->vertex[c][nc + 1] = wvps->vt[_tf + 1];
 						wvps->model->pollys[fnum]->vertex[c][nc + 2] = wvps->vt[_tf + 2];
 					}
 					c++;
 				}
-				if (f->use & MPOLLY_USE_NORMAL)
+				if (f->ptr[nc + 2] && f->use & MPOLLY_USE_NORMAL)
 				{
-					if (f->ptr[nc] < 0)
-						_tf = wvps->vn_num - f->ptr[nc];
-					else _tf = f->ptr[nc];
-					if (_tf > 0 && _tf < wvps->vt_num)
+					if (f->ptr[nc + 2] < 0)
+						_tf = ((wvps->vn_num - f->ptr[nc + 2]) - 1) * 3;
+					else _tf = (f->ptr[nc + 2] - 1) * 3;
+					if (_tf >= 0 && _tf < wvps->vt_num)
 					{
-						_tf = (_tf - 1) * 3;
 						wvps->model->pollys[fnum]->vertex[c][nc] = wvps->vn[_tf];
 						wvps->model->pollys[fnum]->vertex[c][nc + 1] = wvps->vn[_tf + 1];
 						wvps->model->pollys[fnum]->vertex[c][nc + 2] = wvps->vn[_tf + 2];
 					}
 				}
+		//printf ("%p IN\n" ,malloc (10));
 			}
+		//printf ("%p OU\n" ,malloc (10));
+		malloc (10);
+
 		}
 	}
 	// TODO: feel model
@@ -534,6 +538,12 @@ wvfo_load (struct wvfo_parser_t *wvps, char *buf, size_t bfsz)
 				printf ("%d ", wvps->f->ptr[s * (wvps->f->len * 3) + (g * 3)]);
 			}
 			printf ("\n");
+		}
+		s = wvps->v_num;
+		printf ("num = \"%d\"\n", s);
+		for (g = 0; g < s; g++)
+		{
+			printf ("v(%d): %f %f %f\n", g + 1, wvps->v[g * 3], wvps->v[g * 3 + 1], wvps->v[g * 3 + 2]);
 		}
 		if((wvps->errored = wvfo_model_build (wvps)) == ERRORE_OK)
 		{
