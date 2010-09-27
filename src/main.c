@@ -9,10 +9,10 @@
 
 #include "wavefront.h"
 
-#define WVOBJFILE "rez/model01.obj"
+#define WVOBJFILE "rez/model04.obj"
 #define CHUNK_SZ 1024
 
-GLfloat LPOS[] = {0.0f, -4.0f, -15.0f, 1.0f};
+GLfloat LPOS[] = {10.0f, -20.0f, -20.0f, 1.0f};
 GLfloat LAMB[] = {0.2f, 0.2f, 0.2f, 1.0f};
 GLfloat LDIF[] = {0.7f, 0.7f, 0.7f, 1.0f};
 GLfloat LSPE[] = {1.0f, 1.0f, 1.0f, 1.0f};
@@ -26,6 +26,7 @@ void
 display ()
 {
 	size_t pollyn;
+	size_t t;
 	GLenum type;
 	glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glPushMatrix ();
@@ -34,9 +35,9 @@ display ()
 			glRotatef (angX, 1.0f, 0.0f, 0.0f);
 			glRotatef (angY, 0.0f, 1.0f, 0.0f);
 			glRotatef (angZ, 0.0f, 0.0f, 1.0f);
-
+			glPolygonMode (GL_FRONT_AND_BACK, GL_FILL);
 			glEnableClientState (GL_VERTEX_ARRAY);
-
+			glEnableClientState (GL_NORMAL_ARRAY);
 			pollyn = model->pollys_num;
 			while (pollyn--)
 			{
@@ -60,6 +61,7 @@ display ()
 				int cd = 2;
 				while (cd--)
 				{
+					t = 0;
 					if (!cd)
 					{
 						glPolygonMode (GL_FRONT_AND_BACK, GL_LINE);
@@ -71,10 +73,27 @@ display ()
 						glColor3f (1.0f, 0.7f, 0.0f);
 					}
 					glVertexPointer (3, GL_FLOAT, 0, model->pollys[pollyn]->vertex[0]);
-					glDrawArrays (type, 0, model->pollys[pollyn]->num * model->pollys[pollyn]->len);
+					if (model->pollys[pollyn]->use & MPOLLY_USE_NORMAL)
+					{
+						glNormalPointer (GL_FLOAT, 0, model->pollys[pollyn]->vertex[1]);
+					}
+					if (type == GL_POLYGON)
+					{
+						for (t = 0; t < model->pollys[pollyn]->num; t++)
+						{
+							glDrawArrays (type, t * model->pollys[pollyn]->len,\
+								   	model->pollys[pollyn]->len);
+						}
+					}
+					else
+					{
+						glDrawArrays (type, 0,\
+							   	model->pollys[pollyn]->num * model->pollys[pollyn]->len);
+					}
 				}
 			}
 			glDisableClientState (GL_VERTEX_ARRAY);
+			glDisableClientState (GL_NORMAL_ARRAY);
 		glPopMatrix ();
 	glPopMatrix ();
 	glutSwapBuffers ();
@@ -186,6 +205,14 @@ main (int argc, char *argv[])
 			{
 				printf ("# POLLY #%d polygons count: %d with vertexes: %d\n",\
 					   	re, model->pollys[re]->num, model->pollys[re]->len);
+				printf ("## OPT: ");
+				if (model->pollys[re]->use & MPOLLY_USE_VERTEX)
+					printf ("USE_VERTEX ");
+				if (model->pollys[re]->use & MPOLLY_USE_TEXTUR)
+					printf ("USE_TEXTUR ");
+				if (model->pollys[re]->use & MPOLLY_USE_NORMAL)
+					printf ("USE_NORMAL ");
+				printf ("\n");
 				for (sz = 0; sz < model->pollys[re]->num * model->pollys[re]->len * 3; sz++)
 				{
 					if (!(sz % (model->pollys[re]->len * 3))) printf ("\n");
@@ -243,7 +270,8 @@ main (int argc, char *argv[])
 		glEnable (GL_DEPTH_TEST);
 		//glEnable (GL_CULL_FACE);
 		glColorMaterial (GL_FRONT, GL_AMBIENT_AND_DIFFUSE);
-		glShadeModel (GL_SMOOTH);
+		//glShadeModel (GL_SMOOTH);
+		glShadeModel (GL_FLAT);
 		// run
 		glutMainLoop ();
 	}

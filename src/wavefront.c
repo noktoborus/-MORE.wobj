@@ -280,6 +280,8 @@ wvfo_model_build (struct wvfo_parser_t *wvps)
 		// если длина блока полли не равна длине текущего блока
 		if (fplen != f->len || fplen == 0)
 		{
+			
+#if 1
 			pollyn = 0;
 			// поиск нужного указателля на полли
 			if (wvps->model->pollys)
@@ -289,15 +291,19 @@ wvfo_model_build (struct wvfo_parser_t *wvps)
 					// если нашли пустой слот
 					if (!wvps->model->pollys[pollyn]) break;
 					// если нашли нашу полли (с нужным размером блока)
+					printf ("^%d/%d, %p, %p\n", pollyn, wvps->model->pollys_num, (void*)wvps->model->pollys[pollyn], (void*)f);
 					if (wvps->model->pollys[pollyn]->len == f->len) break;
 				}
-				while (pollyn++);
+				while (++pollyn < wvps->model->pollys_num);
 			}
+#else
+			// фтопку поиск нужного, тупо добавляем новую группу фейсов
+			pollyn = wvps->model->pollys_num;
+#endif
 			// если длина нулевая, или не нашли нужную полли
 			// нужно разметить память
 			if (pollyn == wvps->model->pollys_num)
 			{
-				printf ("REAC 1\n");
 				tmp = realloc ((void*)wvps->model->pollys,\
 					   	sizeof (struct model_polly_t*) * (pollyn + 1));
 				if (!tmp) return ERRORE_NOMEM;
@@ -355,21 +361,42 @@ wvfo_model_build (struct wvfo_parser_t *wvps)
 		fplen = -1;
 		while (++fplen < f->len)
 		{
+			fplen *= 3;
 			nc = 0;
 			if (wvps->o->use & MPOLLY_USE_VERTEX)
 			{
-				if (f->ptr[fplen * 3] < 0)
-					_tf = ((wvps->v_num - f->ptr[fplen * 3]) - 1);
-				else _tf = (f->ptr[fplen * 3] - 1);
+				if (f->ptr[fplen] < 0)
+					_tf = ((wvps->v_num - f->ptr[fplen]) - 1);
+				else _tf = (f->ptr[fplen] - 1);
 				if (_tf >= 0 && _tf < wvps->v_num)
 				{
 					_tf *= 3;
-					wvps->model->pollys[pollyn]->vertex[nc][c + (fplen * 3) + 0] = wvps->v[_tf + 0];
-					wvps->model->pollys[pollyn]->vertex[nc][c + (fplen * 3) + 1] = wvps->v[_tf + 1];
-					wvps->model->pollys[pollyn]->vertex[nc][c + (fplen * 3) + 2] = wvps->v[_tf + 2];
+					wvps->model->pollys[pollyn]->vertex[nc][c + (fplen) + 0] = wvps->v[_tf + 0];
+					wvps->model->pollys[pollyn]->vertex[nc][c + (fplen) + 1] = wvps->v[_tf + 1];
+					wvps->model->pollys[pollyn]->vertex[nc][c + (fplen) + 2] = wvps->v[_tf + 2];
 				}
 				nc++;
 			}
+			if (wvps->o->use & MPOLLY_USE_TEXTUR)
+			{
+				// TODO: ...
+				nc++;
+			}
+			if (wvps->o->use & MPOLLY_USE_NORMAL)
+			{
+				if (f->ptr[fplen + 2] < 0)
+					_tf = ((wvps->vn_num - f->ptr[fplen + 2]) - 1);
+				else _tf = (f->ptr[fplen + 2] - 1);
+				if (_tf >= 0 && _tf < wvps->vn_num)
+				{
+					_tf *= 3;
+					wvps->model->pollys[pollyn]->vertex[nc][c + (fplen) + 0] = wvps->vn[_tf + 0];
+					wvps->model->pollys[pollyn]->vertex[nc][c + (fplen) + 1] = wvps->vn[_tf + 1];
+					wvps->model->pollys[pollyn]->vertex[nc][c + (fplen) + 1] = wvps->vn[_tf + 2];
+				}
+
+			}
+			fplen /= 3;
 		}
 		// end while
 		wvps->f = f->next;
@@ -455,32 +482,15 @@ wvfo_load (struct wvfo_parser_t *wvps, char *buf, size_t bfsz)
 
 		buf[offset] = last;
 	}
-	if (wvps->errored)
+	if (!wvps->errored)
 	{
-		if (wvps->errored > ERRORE_LAST) wvps->errored = ERRORE_LAST;
-		printf ("WVPS: %d (%s) line %d point %d (%s:%p)\n", wvps->errored,\
-			   	error_table[wvps->errored], wvps->cline, wvps->point,\
-			   	state_table[wvps->state].name, (void*)&(state_table[wvps->state].callback));
-		printf ("`%s\"\n", &buf[r]);
-		// TODO: free () all
-	}
-	else
-	{
-		printf ("@ v=`%d'\n", wvps->v_num);
-		printf ("@@ name=`%s' fcount=`%d'\n", wvps->o->name, wvps->o->fcount);
-		printf ("@@@ USE_VERTEX = %d\n", wvps->o->use & MPOLLY_USE_VERTEX);
-		printf ("@@@ USE_TEXTUR = %d\n", wvps->o->use & MPOLLY_USE_TEXTUR);
-		printf ("@@@ USE_NORMAL = %d\n", wvps->o->use & MPOLLY_USE_NORMAL);
-		printf ("@@@ BUILD MODEL\n");
 		if((wvps->errored = wvfo_model_build (wvps)) == ERRORE_OK)
 		{
 			model = wvps->model;
 			wvps->model = NULL;
-			printf ("@ BUILD OK\n");
 			return model;
 		}
 	}
-	printf ("@ END %u\n", r);
 	return model;
 }
 
