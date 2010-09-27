@@ -9,34 +9,71 @@
 
 #include "wavefront.h"
 
-#define WVOBJFILE "rez/model02.obj"
+#define WVOBJFILE "rez/model01.obj"
 #define CHUNK_SZ 1024
 
-GLfloat LPOS[] = {0.0f, 4.0f, 15.0f, 1.0f};
+GLfloat LPOS[] = {0.0f, -4.0f, -15.0f, 1.0f};
 GLfloat LAMB[] = {0.2f, 0.2f, 0.2f, 1.0f};
 GLfloat LDIF[] = {0.7f, 0.7f, 0.7f, 1.0f};
 GLfloat LSPE[] = {1.0f, 1.0f, 1.0f, 1.0f};
 struct model_t *model;
+GLfloat TZet = -5.0f;
+GLfloat angX = 0.0f;
+GLfloat angY = 0.0f;
+GLfloat angZ = 0.0f;
 
 void
 display ()
 {
+	size_t pollyn;
+	GLenum type;
 	glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glPushMatrix ();
-		glTranslatef (0.0f, 0.0f, -3.0f);
-		glPolygonMode (GL_FRONT_AND_BACK, GL_LINE);
+		glTranslatef (0.0f, 0.0f, TZet);
 		glPushMatrix ();
-			glRotatef (95.0f, 1.0f, 0.0f, 0.0f);
-			glColor3f (1.0f, 0.7f, 0.0f);
+			glRotatef (angX, 1.0f, 0.0f, 0.0f);
+			glRotatef (angY, 0.0f, 1.0f, 0.0f);
+			glRotatef (angZ, 0.0f, 0.0f, 1.0f);
 
 			glEnableClientState (GL_VERTEX_ARRAY);
 
-			glVertexPointer (3, GL_FLOAT, 0, model->pollys[0]->vertex[0]);
-
-			//glDrawArrays (GL_LINES, 0, CC);
-			//glDrawArrays (GL_LINES, 0, model->pollys[0]->num * model->pollys[0]->len);
-			glDrawArrays (GL_QUADS, 0, model->pollys[0]->num * model->pollys[0]->len);
-
+			pollyn = model->pollys_num;
+			while (pollyn--)
+			{
+				switch (model->pollys[pollyn]->len)
+				{
+					case 1:
+						type = GL_POINTS;
+						break;
+					case 2:
+						type = GL_LINES;
+						break;
+					case 3:
+						type = GL_TRIANGLES;
+						break;
+					case 4:
+						type = GL_QUADS;
+						break;
+					default:
+						type = GL_POLYGON;
+				}
+				int cd = 2;
+				while (cd--)
+				{
+					if (!cd)
+					{
+						glPolygonMode (GL_FRONT_AND_BACK, GL_LINE);
+						glColor3f (1.0f, 1.0f, 1.0f);
+					}
+					else
+					{
+						glPolygonMode (GL_FRONT_AND_BACK, GL_FILL);
+						glColor3f (1.0f, 0.7f, 0.0f);
+					}
+					glVertexPointer (3, GL_FLOAT, 0, model->pollys[pollyn]->vertex[0]);
+					glDrawArrays (type, 0, model->pollys[pollyn]->num * model->pollys[pollyn]->len);
+				}
+			}
 			glDisableClientState (GL_VERTEX_ARRAY);
 		glPopMatrix ();
 	glPopMatrix ();
@@ -68,6 +105,18 @@ timerP (int val)
 void
 key (unsigned char key, int x, int y)
 {
+	if (key == 'q') glEnable (GL_CULL_FACE);
+	if (key == 'w') glDisable (GL_CULL_FACE);
+	if (key == 'l') angY += 5;
+	if (key == 'j') angY -= 5;
+	if (key == 'i') angX += 5;
+	if (key == 'k') angX -= 5;
+	if (angX > 360.0f) angX = 0.0f;
+	if (angX < 0.0f) angX = 360.0f;
+	if (angY > 360.0f) angY = 0.0f;
+	if (angY < 0.0f) angY = 360.0f;
+	if (angZ > 360.0f) angZ = 0.0f;
+	if (angZ < 0.0f) angZ = 360.0f;
 }
 
 void
@@ -79,6 +128,18 @@ motion (int x, int y)
 void
 mouse (int button, int state, int x, int y)
 {
+	if (state == 0)
+	{
+		switch (button)
+		{
+			case 3:
+			   	TZet += 1;
+				break;
+			case 4:
+			   	TZet -= 1;
+				break;
+		}
+	}
 }
 
 int
@@ -180,7 +241,7 @@ main (int argc, char *argv[])
 		glEnable (GL_LIGHT0);
 		glEnable (GL_COLOR_MATERIAL);
 		glEnable (GL_DEPTH_TEST);
-		glDisable (GL_CULL_FACE);
+		//glEnable (GL_CULL_FACE);
 		glColorMaterial (GL_FRONT, GL_AMBIENT_AND_DIFFUSE);
 		glShadeModel (GL_SMOOTH);
 		// run

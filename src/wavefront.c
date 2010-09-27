@@ -64,7 +64,7 @@ char *error_table[] =
 {
 	"All Good",
 	"Unknown error",
-	"Kill self, because I suck"
+	"Kill self, because I suck",
 	"Unknown key parse error",
 	"Unknown key",
 	"Need more free memory",
@@ -84,7 +84,9 @@ enum wvfo_state
 	STATE_VT,
 	STATE_F,
 	STATE_O,
+	STATE_G,
 	STATE_USEMTL,
+	STATE_MTLLIB,
 	// control group, last
 	STATE_SEEK,
 };
@@ -219,20 +221,36 @@ state_usemtl (struct wvfo_parser_t *wvps, size_t numcalls, char *buf, size_t bfs
 	return ERRORE_OK;
 }
 
+int
+state_g (struct wvfo_parser_t *wvps, size_t numcalls, char *buf, size_t bfsz)
+{
+	return ERRORE_OK;
+}
+
+int
+state_mtllib (struct wvfo_parser_t *wvps, size_t numcalls, char *buf, size_t bfsz)
+{
+	return ERRORE_OK;
+}
+
 struct state_table_t
 {
 	char *name;
 	int (*callback) (struct wvfo_parser_t*, size_t, char*, size_t);
+	size_t namesize;
+	int state;
 } state_table[] =
 {
-	{"STATE_ZERO", NULL},
-	{"v", state_v_n},
-	{"vn", state_v_n},
-	{"vt", state_vt},
-	{"f", state_f},
-	{"o", state_o},
-	{"usemtl", state_usemtl},
-	{"STATE_SEEK", NULL},
+	{"STATE_ZERO", NULL, 0, STATE_ZERO},
+	{"v", state_v_n, 1, STATE_V},
+	{"vn", state_v_n, 2, STATE_VN},
+	{"vt", state_vt, 2, STATE_VT},
+	{"f", state_f, 1, STATE_F},
+	{"g", state_g, 1, STATE_G},
+	{"o", state_o, 1, STATE_O},
+	{"usemtl", state_usemtl, 6, STATE_USEMTL},
+	{"mtllib", state_mtllib, 6, STATE_MTLLIB},
+	{"STATE_SEEK", NULL, 0, STATE_SEEK},
 };
 
 static inline int
@@ -319,21 +337,20 @@ wvfo_model_build (struct wvfo_parser_t *wvps)
 		if (wvps->o->use & MPOLLY_USE_VERTEX) nc++;
 		if (wvps->o->use & MPOLLY_USE_TEXTUR) nc++;
 		if (wvps->o->use & MPOLLY_USE_NORMAL) nc++;
-		// указатель на нужный блок (до переразметки - указатель на конец массива)
-		c = wvps->model->pollys[pollyn]->num * fplen * sizeof (float) * 3;
+		// какая-то лажа
+		c = wvps->model->pollys[pollyn]->num * (fplen * 3);
 		if (!nc) return ERRORE_SUICIDE;
 		while (nc--)
 		{
-			tmp = realloc ((void*)wvps->model->pollys[pollyn]->vertex[nc], c + (fplen * sizeof (float) * 3));
+			tmp = calloc (c + (fplen * 3), sizeof (float) * 3);
 			if (!tmp) return ERRORE_NOMEM;
-			// подчищаем память
-			memset ((void*)&(((char*)tmp)[c]), 0, (fplen * sizeof (float) * 3));
+			memcpy (tmp, (const void*)wvps->model->pollys[pollyn]->vertex[nc], c * sizeof (float));
+			free (wvps->model->pollys[pollyn]->vertex[nc]);
 			// заполняем базовые поля
 			wvps->model->pollys[pollyn]->vertex[nc] = (float*)tmp;
 			wvps->model->pollys[pollyn]->num++;
 		}
 		// FF
-		c = wvps->model->pollys[pollyn]->num * f->len * 3;
 		_tf = 0;
 		fplen = -1;
 		while (++fplen < f->len)
@@ -347,9 +364,9 @@ wvfo_model_build (struct wvfo_parser_t *wvps)
 				if (_tf >= 0 && _tf < wvps->v_num)
 				{
 					_tf *= 3;
-					wvps->model->pollys[pollyn]->vertex[nc][c - fplen * 3 - 3] = wvps->v[_tf + 0];
-					wvps->model->pollys[pollyn]->vertex[nc][c - fplen * 3 - 2] = wvps->v[_tf + 1];
-					wvps->model->pollys[pollyn]->vertex[nc][c - fplen * 3 - 1] = wvps->v[_tf + 2];
+					wvps->model->pollys[pollyn]->vertex[nc][c + (fplen * 3) + 0] = wvps->v[_tf + 0];
+					wvps->model->pollys[pollyn]->vertex[nc][c + (fplen * 3) + 1] = wvps->v[_tf + 1];
+					wvps->model->pollys[pollyn]->vertex[nc][c + (fplen * 3) + 2] = wvps->v[_tf + 2];
 				}
 				nc++;
 			}
@@ -359,157 +376,6 @@ wvfo_model_build (struct wvfo_parser_t *wvps)
 		free (f);
 		f = NULL;
 	}
-	/*
-	void *tmp;
-	struct wvfo_f_t *f;
-	size_t fnum;
-	size_t c;
-	size_t nc;
-	int32_t _tf;
-	if (!wvps->model)
-	{
-		wvps->model = (struct model_t*)calloc (1, sizeof (struct model_t));
-		if (!wvps->model) return ERRORE_NOMEM;
-	}
-	if (wvps->f_num != wvps->model->pollys_num)
-	{
-		if (wvps->model->pollys_num > wvps->f_num)
-		{
-			while (wvps->model->pollys_num-- > wvps->f_num)
-			{
-				if (wvps->model->pollys[wvps->model->pollys_num])
-				{
-					c = 0;
-					if (wvps->model->pollys[wvps->model->pollys_num]->use & MPOLLY_USE_VERTEX) c++;
-					if (wvps->model->pollys[wvps->model->pollys_num]->use & MPOLLY_USE_TEXTUR) c++;
-					if (wvps->model->pollys[wvps->model->pollys_num]->use & MPOLLY_USE_NORMAL) c++;
-					while (c--) free (wvps->model->pollys[wvps->model->pollys_num]->vertex[c]);
-				}
-				free (wvps->model->pollys[wvps->model->pollys_num]);
-			}
-		}
-		tmp = realloc ((void*)wvps->model->pollys, (sizeof (struct model_polly_t*) * wvps->f_num));
-		if (!tmp) return ERRORE_NOMEM;
-		wvps->model->pollys = (struct model_polly_t**)tmp;
-		while (wvps->model->pollys_num < wvps->f_num)
-		{
-			 wvps->model->pollys[wvps->model->pollys_num++] = NULL;
-		}
-	}
-	// обрабатываем группы f(ace)-ов
-	if (wvps->f_num)
-	{
-		wvps->model->pollys_num = wvps->f_num;
-		// не забываем, что список wvps->f "перевёрнут"
-		for (f = wvps->f, fnum = wvps->f_num; fnum--, f; f = f->next)
-		{
-			nc = 0;
-			if (f->use & MPOLLY_USE_VERTEX) nc++;
-			if (f->use & MPOLLY_USE_TEXTUR) nc++;
-			if (f->use & MPOLLY_USE_NORMAL) nc++;
-			c = 0;
-			if (wvps->model->pollys[fnum])
-			{
-				if (wvps->model->pollys[fnum]->use & MPOLLY_USE_VERTEX) c++;
-				if (wvps->model->pollys[fnum]->use & MPOLLY_USE_TEXTUR) c++;
-				if (wvps->model->pollys[fnum]->use & MPOLLY_USE_NORMAL) c++;
-			}
-			// проверка на необходимость переразметки структуры
-			if (c != nc)
-			{
-				if (c > nc)
-				{
-					while (c-- > nc)
-					{
-					   	free (wvps->model->pollys[fnum]->vertex[c]);
-						wvps->model->pollys[fnum]->vertex[c] = NULL;
-					}
-				}
-				tmp = realloc ((void*)wvps->model->pollys[fnum],\
-					   	sizeof (struct model_polly_t) + sizeof (float*) * (nc>0?(nc - 1):0));
-				if (!tmp) return ERRORE_NOMEM;
-				wvps->model->pollys[fnum] = (struct model_polly_t*)tmp;
-				wvps->model->pollys[fnum]->use = f->use;
-				while (c < nc)
-				{
-					wvps->model->pollys[fnum]->vertex[c++] = NULL;
-				}
-			}
-			// тот же фокус, только с количеством групп в списках
-			if (f->len != wvps->model->pollys[fnum]->len || 
-					f->num != wvps->model->pollys[fnum]->len)
-			{
-				while (c--)
-				{
-					if (wvps->model->pollys[fnum]->vertex[c])
-					{
-						free (wvps->model->pollys[fnum]->vertex[c]);
-						wvps->model->pollys[fnum]->vertex[c] = NULL;
-					}
-					wvps->model->pollys[fnum]->vertex[c] =\
-					   	(float*)calloc (1, sizeof (float) * (f->num * f->len * 3));
-					if (!wvps->model->pollys[fnum]->vertex[c])
-						return ERRORE_NOMEM;
-				}
-				wvps->model->pollys[fnum]->len = f->len;
-				wvps->model->pollys[fnum]->num = f->num;
-			}
-			_tf = 2;
-			// заполняем списки
-			for (nc = 0; nc < f->len * f->num; nc /= 3, nc++)
-			{
-				nc *= 3;
-				c = 0;
-				if (f->ptr[nc] && f->use & MPOLLY_USE_VERTEX)
-				{
-					if (f->ptr[nc] < 0)
-						_tf = ((wvps->v_num - f->ptr[nc]) - 1) * 3;
-					else _tf = (f->ptr[nc] - 1) * 3;
-					//_tf = (_tf - 1);
-					if (_tf >= 0 && _tf < (wvps->v_num * 3))
-					{
-						wvps->model->pollys[fnum]->vertex[c][nc] = wvps->v[_tf];
-						wvps->model->pollys[fnum]->vertex[c][nc + 1] = wvps->v[_tf + 1];
-						wvps->model->pollys[fnum]->vertex[c][nc + 2] = wvps->v[_tf + 2];
-					}
-					else
-						printf ("E %d %d\n", nc, _tf);
-					c++;
-				}
-				if (f->ptr[nc + 1] && f->use & MPOLLY_USE_TEXTUR)
-				{
-					if (f->ptr[nc + 1] < 0)
-						_tf = ((wvps->vt_num - f->ptr[nc + 2]) - 1) * 3;
-					else _tf = (f->ptr[nc + 1] - 1) * 3;
-					if (_tf >= 0 && _tf < wvps->vt_num)
-					{
-						wvps->model->pollys[fnum]->vertex[c][nc] = wvps->vt[_tf];
-						wvps->model->pollys[fnum]->vertex[c][nc + 1] = wvps->vt[_tf + 1];
-						wvps->model->pollys[fnum]->vertex[c][nc + 2] = wvps->vt[_tf + 2];
-					}
-					c++;
-				}
-				if (f->ptr[nc + 2] && f->use & MPOLLY_USE_NORMAL)
-				{
-					if (f->ptr[nc + 2] < 0)
-						_tf = ((wvps->vn_num - f->ptr[nc + 2]) - 1) * 3;
-					else _tf = (f->ptr[nc + 2] - 1) * 3;
-					if (_tf >= 0 && _tf < wvps->vt_num)
-					{
-						wvps->model->pollys[fnum]->vertex[c][nc] = wvps->vn[_tf];
-						wvps->model->pollys[fnum]->vertex[c][nc + 1] = wvps->vn[_tf + 1];
-						wvps->model->pollys[fnum]->vertex[c][nc + 2] = wvps->vn[_tf + 2];
-					}
-				}
-		//printf ("%p IN\n" ,malloc (10));
-			}
-		//printf ("%p OU\n" ,malloc (10));
-		malloc (10);
-
-		}
-	}
-	// TODO: feel model
-	*/
 	return ERRORE_OK;
 }
 
@@ -525,6 +391,7 @@ wvfo_load (struct wvfo_parser_t *wvps, char *buf, size_t bfsz)
 	size_t sz = 0;
 	// return value
 	size_t r = 0;
+	size_t p = 0;
 	// offset value
 	size_t offset = 0;
 	// little fix :3
@@ -555,36 +422,22 @@ wvfo_load (struct wvfo_parser_t *wvps, char *buf, size_t bfsz)
 				wvps->state = STATE_SEEK;
 			}
 			else
-			if (sz == 1)
 			{
-				switch (buf[r])
+				p = STATE_SEEK;
+				while (--p > STATE_ZERO)
 				{
-					case 'v':
-						wvps->state = STATE_V;
-						break;
-					case 'f':
-						wvps->state = STATE_F;
-						break;
-					case 'o':
-						wvps->state = STATE_O;
-						break;
+					if (sz && state_table[p].namesize == sz)
+					{
+						if ((sz == 1 && state_table[p].name[0] == buf[r]) ||
+								(!strncmp (&(buf[r]), state_table[p].name, sz)))
+						{
+							wvps->state = state_table[p].state;
+							break;
+						}
+
+					}
 				}
 			}
-			else
-			if (sz == 2)
-			{
-				if (!strcmp ("vn", &(buf[r])))
-					wvps->state = STATE_VN;
-				else
-				if (!strcmp ("vt", &(buf[r])))
-					wvps->state = STATE_VT;
-			}
-			else
-			{
-				if (!strcmp ("usemtl", &(buf[r])))
-					wvps->state = STATE_USEMTL;
-			}
-
 			if (wvps->state == STATE_ZERO)
 			{
 				wvps->errored = ERRORE_UKEY;
