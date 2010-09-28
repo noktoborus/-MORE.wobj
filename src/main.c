@@ -7,35 +7,68 @@
 #include <GL/glu.h>
 #include <GL/glut.h>
 
+#include <math.h>
+#define GL_PI 3.1415f
+
 #include "wavefront.h"
 
-#define WVOBJFILE "rez/model04.obj"
+
+#if 1
+#	define WVOBJFILE "rez/model04.obj"
+#else
+#	define WVOBJFILE "rez/cube.obj"
+#endif
+
 #define CHUNK_SZ 1024
 
-GLfloat LPOS[] = {10.0f, -20.0f, -20.0f, 1.0f};
+GLfloat LPOS[] = {-20.0f, 20.0f, 20.0f, 1.0f};
 GLfloat LAMB[] = {0.2f, 0.2f, 0.2f, 1.0f};
 GLfloat LDIF[] = {0.7f, 0.7f, 0.7f, 1.0f};
 GLfloat LSPE[] = {1.0f, 1.0f, 1.0f, 1.0f};
 struct model_t *model;
-GLfloat TZet = -5.0f;
+GLfloat TZet = -20.0f;
 GLfloat angX = 0.0f;
 GLfloat angY = 0.0f;
 GLfloat angZ = 0.0f;
 
+int mmotion_X = 0;
+int mmotion_Y = 0;
+
 void
 display ()
 {
+	GLenum error;
+
 	size_t pollyn;
 	size_t t;
 	GLenum type;
+	pollyn = 0;
+	t = 0;
+	type = 0;
 	glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glPushMatrix ();
 		glTranslatef (0.0f, 0.0f, TZet);
+		glLightfv (GL_LIGHT0, GL_POSITION, LPOS);
 		glPushMatrix ();
+			glTranslatef (LPOS[0], LPOS[1], LPOS[2]);
+			glDisable (GL_LIGHTING);
+			glColor3f (1.0f, 1.0f, 1.0f);
+			glutSolidSphere (1, 15, 15);
+			glEnable (GL_LIGHTING);
+		glPopMatrix ();
+#if 1 
+		glPushMatrix ();
+			//glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE);
 			glRotatef (angX, 1.0f, 0.0f, 0.0f);
 			glRotatef (angY, 0.0f, 1.0f, 0.0f);
 			glRotatef (angZ, 0.0f, 0.0f, 1.0f);
-			glPolygonMode (GL_FRONT_AND_BACK, GL_FILL);
+			glPushMatrix ();
+				glTranslatef (5.0f, 0.0f, 0.0f);
+				glutSolidTeapot (2);
+			glPopMatrix ();
+			glScalef (2.0f, 2.0f, 2.0f);
+	//		glPolygonMode (GL_FRONT_AND_BACK, GL_FILL);
+	//		glutSolidSphere (2, 15, 15);
 			glEnableClientState (GL_VERTEX_ARRAY);
 			glEnableClientState (GL_NORMAL_ARRAY);
 			pollyn = model->pollys_num;
@@ -58,45 +91,36 @@ display ()
 					default:
 						type = GL_POLYGON;
 				}
-				int cd = 2;
-				while (cd--)
+				//glPolygonMode (GL_FRONT_AND_BACK, GL_LINE);
+//						glColor3f (1.0f, 1.0f, 1.0f);
+				glVertexPointer (3, GL_FLOAT, 0, model->pollys[pollyn]->vertex[0]);
+				if (model->pollys[pollyn]->use & MPOLLY_USE_NORMAL)
 				{
-					t = 0;
-					if (!cd)
+					glNormalPointer (GL_FLOAT, 0, model->pollys[pollyn]->vertex[1]);
+				}
+				if (type == GL_POLYGON)
+				{
+					for (t = 0; t < model->pollys[pollyn]->num; t++)
 					{
-						glPolygonMode (GL_FRONT_AND_BACK, GL_LINE);
-						glColor3f (1.0f, 1.0f, 1.0f);
+						glDrawArrays (type, t * model->pollys[pollyn]->len,\
+								model->pollys[pollyn]->len);
 					}
-					else
-					{
-						glPolygonMode (GL_FRONT_AND_BACK, GL_FILL);
-						glColor3f (1.0f, 0.7f, 0.0f);
-					}
-					glVertexPointer (3, GL_FLOAT, 0, model->pollys[pollyn]->vertex[0]);
-					if (model->pollys[pollyn]->use & MPOLLY_USE_NORMAL)
-					{
-						glNormalPointer (GL_FLOAT, 0, model->pollys[pollyn]->vertex[1]);
-					}
-					if (type == GL_POLYGON)
-					{
-						for (t = 0; t < model->pollys[pollyn]->num; t++)
-						{
-							glDrawArrays (type, t * model->pollys[pollyn]->len,\
-								   	model->pollys[pollyn]->len);
-						}
-					}
-					else
-					{
-						glDrawArrays (type, 0,\
-							   	model->pollys[pollyn]->num * model->pollys[pollyn]->len);
-					}
+				}
+				else
+				{
+					//build ();
+					glDrawArrays (type, 0,\
+						   model->pollys[pollyn]->num * model->pollys[pollyn]->len);
 				}
 			}
 			glDisableClientState (GL_VERTEX_ARRAY);
 			glDisableClientState (GL_NORMAL_ARRAY);
 		glPopMatrix ();
+#endif
 	glPopMatrix ();
 	glutSwapBuffers ();
+	if ((error = glGetError ()))
+		printf ("ERROR: OpenGL: %d, %s\n", error, gluErrorString (error));
 }
 
 void
@@ -126,10 +150,14 @@ key (unsigned char key, int x, int y)
 {
 	if (key == 'q') glEnable (GL_CULL_FACE);
 	if (key == 'w') glDisable (GL_CULL_FACE);
+	if (key == 'e') glShadeModel (GL_FLAT);
+	if (key == 'r') glShadeModel (GL_SMOOTH);
 	if (key == 'l') angY += 5;
 	if (key == 'j') angY -= 5;
 	if (key == 'i') angX += 5;
 	if (key == 'k') angX -= 5;
+	if (key == 'a') angZ += 5;
+	if (key == 'd') angZ -= 5;
 	if (angX > 360.0f) angX = 0.0f;
 	if (angX < 0.0f) angX = 360.0f;
 	if (angY > 360.0f) angY = 0.0f;
@@ -141,21 +169,62 @@ key (unsigned char key, int x, int y)
 void
 motion (int x, int y)
 {
-
+	if (mmotion_X)
+	{
+		if (mmotion_X > x) angY += 1.0f;
+		else
+		if (mmotion_X < x) angY -= 1.0f;
+		mmotion_X = x;
+	}
+	if (mmotion_Y)
+	{
+		if (mmotion_Y > y) angX += 0.5f;
+		else
+		if (mmotion_Y < y) angX -= 0.5f;
+		mmotion_Y = y;
+	}
+	if (angX > 360.0f) angX = 0.0f;
+	if (angX < 0.0f) angX = 360.0f;
+	if (angY > 360.0f) angY = 0.0f;
+	if (angY < 0.0f) angY = 360.0f;
 }
 
 void
 mouse (int button, int state, int x, int y)
 {
-	if (state == 0)
+	//printf ("M -> button: %d, state: %d\n", button, state);
+	// buttons:
+	// 	left: 0
+	// 	center: 1
+	// 	right: 2
+	// 	wheelup: 3
+	// 	wheeldown: 4
+	// state:
+	// 	down: 0
+	// 	up: 1
+	if (state == 0) // down
 	{
 		switch (button)
 		{
+			case 0:
+				mmotion_X = x;
+				mmotion_Y = y;
+				break;
 			case 3:
 			   	TZet += 1;
 				break;
 			case 4:
 			   	TZet -= 1;
+				break;
+		}
+	}
+	if (state == 1) // up
+	{
+		switch (button)
+		{
+			case 0:
+				mmotion_X = 0;
+				mmotion_Y = 0;
 				break;
 		}
 	}
@@ -170,6 +239,7 @@ main (int argc, char *argv[])
 	char chunk[CHUNK_SZ];
 	size_t re = 0;
 	size_t sz = 0;
+	size_t c = 0;
 	//size_t tt = 0;
 	struct wvfo_parser_t wvps;
 	if ((f = fopen (WVOBJFILE, "r")))
@@ -193,7 +263,8 @@ main (int argc, char *argv[])
 		printf ("# LOAD: %p %u\n", buf, sz);
 		wvfo_zero (&wvps);
 		model = wvfo_load (&wvps, buf, sz);
-		printf ("# COMPLETE %p\n", (void*)model);
+		printf ("# COMPLETE %p (%s -> %d:%d)\n", (void*)model, wvfo_error_str (wvfo_error (&wvps)),
+				wvfo_state_row (&wvps), wvfo_state_col (&wvps));
 	}
 	if (model)
 	{
@@ -203,21 +274,34 @@ main (int argc, char *argv[])
 		{
 			do
 			{
-				printf ("# POLLY #%d polygons count: %d with vertexes: %d\n",\
+				printf ("# POLLY #%d faces count: %d with vertexes: %d\n",\
 					   	re, model->pollys[re]->num, model->pollys[re]->len);
 				printf ("## OPT: ");
 				if (model->pollys[re]->use & MPOLLY_USE_VERTEX)
-					printf ("USE_VERTEX ");
-				if (model->pollys[re]->use & MPOLLY_USE_TEXTUR)
-					printf ("USE_TEXTUR ");
-				if (model->pollys[re]->use & MPOLLY_USE_NORMAL)
-					printf ("USE_NORMAL ");
-				printf ("\n");
-				for (sz = 0; sz < model->pollys[re]->num * model->pollys[re]->len * 3; sz++)
 				{
-					if (!(sz % (model->pollys[re]->len * 3))) printf ("\n");
-					if (!(sz % 3)) printf ("| ");
-					printf ("%2.1f ", model->pollys[re]->vertex[0][sz]);
+					c++;
+					printf ("USE_VERTEX ");
+				}
+				if (model->pollys[re]->use & MPOLLY_USE_TEXTUR)
+				{
+					c++;
+					printf ("USE_TEXTUR ");
+				}
+				if (model->pollys[re]->use & MPOLLY_USE_NORMAL)
+				{
+					c++;
+					printf ("USE_NORMAL ");
+				}
+				printf ("\n");
+				while (c--)
+				{
+					printf ("\n# %d\n", c);
+					for (sz = 0; sz < model->pollys[re]->num * model->pollys[re]->len * 3; sz++)
+					{
+						if (!(sz % (model->pollys[re]->len * 3))) printf ("\n");
+						if (!(sz % 3)) printf ("| ");
+						printf ("%2.1f ", model->pollys[re]->vertex[c][sz]);
+					}
 				}
 				printf ("\nSZ: %d\n## ", sz);
 				printf ("\n##\n");
@@ -264,14 +348,14 @@ main (int argc, char *argv[])
 		//glLightfv (GL_LIGHT0, GL_AMBIENT, LAMB);
 		//glLightfv (GL_LIGHT0, GL_SPECULAR, LSPE);
 		//glLightfv (GL_LIGHT0, GL_DIFFUSE, LDIF);
-		glLightfv (GL_LIGHT0, GL_POSITION, LPOS);
 		glEnable (GL_LIGHT0);
 		glEnable (GL_COLOR_MATERIAL);
 		glEnable (GL_DEPTH_TEST);
+		glEnable (GL_NORMALIZE);
 		//glEnable (GL_CULL_FACE);
 		glColorMaterial (GL_FRONT, GL_AMBIENT_AND_DIFFUSE);
-		//glShadeModel (GL_SMOOTH);
-		glShadeModel (GL_FLAT);
+		glShadeModel (GL_SMOOTH);
+		//glShadeModel (GL_FLAT);
 		// run
 		glutMainLoop ();
 	}

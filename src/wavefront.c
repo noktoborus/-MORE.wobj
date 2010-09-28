@@ -60,7 +60,7 @@ enum error_enume_t
 	ERRORE_LAST,
 };
 
-char *error_table[] =
+char const *error_table[] =
 {
 	"All Good",
 	"Unknown error",
@@ -131,7 +131,6 @@ state_v_n (struct wvfo_parser_t *wvps, size_t numcalls, char *buf, size_t bfsz)
 	if (ptr && num)
 	{
 	   	ptr[num * 3 - 3 + numcalls] = strtof (buf, NULL); 
-		//printf ("VERTEX #%d:%d %f\n", num, numcalls, ptr[num * 3 - 3 + numcalls]);
 	}
 	return ERRORE_OK;
 }
@@ -246,8 +245,8 @@ struct state_table_t
 	{"vn", state_v_n, 2, STATE_VN},
 	{"vt", state_vt, 2, STATE_VT},
 	{"f", state_f, 1, STATE_F},
-	{"g", state_g, 1, STATE_G},
 	{"o", state_o, 1, STATE_O},
+	{"g", state_g, 1, STATE_G},
 	{"usemtl", state_usemtl, 6, STATE_USEMTL},
 	{"mtllib", state_mtllib, 6, STATE_MTLLIB},
 	{"STATE_SEEK", NULL, 0, STATE_SEEK},
@@ -291,7 +290,6 @@ wvfo_model_build (struct wvfo_parser_t *wvps)
 					// если нашли пустой слот
 					if (!wvps->model->pollys[pollyn]) break;
 					// если нашли нашу полли (с нужным размером блока)
-					printf ("^%d/%d, %p, %p\n", pollyn, wvps->model->pollys_num, (void*)wvps->model->pollys[pollyn], (void*)f);
 					if (wvps->model->pollys[pollyn]->len == f->len) break;
 				}
 				while (++pollyn < wvps->model->pollys_num);
@@ -350,12 +348,14 @@ wvfo_model_build (struct wvfo_parser_t *wvps)
 		{
 			tmp = calloc (c + (fplen * 3), sizeof (float) * 3);
 			if (!tmp) return ERRORE_NOMEM;
-			memcpy (tmp, (const void*)wvps->model->pollys[pollyn]->vertex[nc], c * sizeof (float));
+			//memcpy (tmp, (const void*)wvps->model->pollys[pollyn]->vertex[nc], c * sizeof (float));
+			memcpy ((void*)&(((float*)tmp)[fplen * 3]),\
+				   (const void*)wvps->model->pollys[pollyn]->vertex[nc], c * sizeof (float));
 			free (wvps->model->pollys[pollyn]->vertex[nc]);
 			// заполняем базовые поля
 			wvps->model->pollys[pollyn]->vertex[nc] = (float*)tmp;
-			wvps->model->pollys[pollyn]->num++;
 		}
+		wvps->model->pollys[pollyn]->num++;
 		// FF
 		_tf = 0;
 		fplen = -1;
@@ -371,9 +371,12 @@ wvfo_model_build (struct wvfo_parser_t *wvps)
 				if (_tf >= 0 && _tf < wvps->v_num)
 				{
 					_tf *= 3;
-					wvps->model->pollys[pollyn]->vertex[nc][c + (fplen) + 0] = wvps->v[_tf + 0];
-					wvps->model->pollys[pollyn]->vertex[nc][c + (fplen) + 1] = wvps->v[_tf + 1];
-					wvps->model->pollys[pollyn]->vertex[nc][c + (fplen) + 2] = wvps->v[_tf + 2];
+					wvps->model->pollys[pollyn]->vertex[nc][fplen + 0] = wvps->v[_tf + 0];
+					wvps->model->pollys[pollyn]->vertex[nc][fplen + 1] = wvps->v[_tf + 1];
+					wvps->model->pollys[pollyn]->vertex[nc][fplen + 2] = wvps->v[_tf + 2];
+				//	wvps->model->pollys[pollyn]->vertex[nc][c + (fplen) + 0] = wvps->v[_tf + 0];
+				//	wvps->model->pollys[pollyn]->vertex[nc][c + (fplen) + 1] = wvps->v[_tf + 1];
+				//	wvps->model->pollys[pollyn]->vertex[nc][c + (fplen) + 2] = wvps->v[_tf + 2];
 				}
 				nc++;
 			}
@@ -390,9 +393,12 @@ wvfo_model_build (struct wvfo_parser_t *wvps)
 				if (_tf >= 0 && _tf < wvps->vn_num)
 				{
 					_tf *= 3;
-					wvps->model->pollys[pollyn]->vertex[nc][c + (fplen) + 0] = wvps->vn[_tf + 0];
-					wvps->model->pollys[pollyn]->vertex[nc][c + (fplen) + 1] = wvps->vn[_tf + 1];
-					wvps->model->pollys[pollyn]->vertex[nc][c + (fplen) + 1] = wvps->vn[_tf + 2];
+					wvps->model->pollys[pollyn]->vertex[nc][fplen + 0] = wvps->vn[_tf + 0];
+					wvps->model->pollys[pollyn]->vertex[nc][fplen + 1] = wvps->vn[_tf + 1];
+					wvps->model->pollys[pollyn]->vertex[nc][fplen + 2] = wvps->vn[_tf + 2];
+				//	wvps->model->pollys[pollyn]->vertex[nc][c + (fplen) + 0] = wvps->vn[_tf + 0];
+				//	wvps->model->pollys[pollyn]->vertex[nc][c + (fplen) + 1] = wvps->vn[_tf + 1];
+				//	wvps->model->pollys[pollyn]->vertex[nc][c + (fplen) + 1] = wvps->vn[_tf + 2];
 				}
 
 			}
@@ -400,10 +406,40 @@ wvfo_model_build (struct wvfo_parser_t *wvps)
 		}
 		// end while
 		wvps->f = f->next;
-		free (f);
+		if (f->ptr) free (f->ptr);
+		if (f) free (f);
 		f = NULL;
 	}
 	return ERRORE_OK;
+}
+
+int
+wvfo_error (struct wvfo_parser_t *wvps)
+{
+	if (!wvps) return ERRORE_OK;
+	return wvps->errored;
+}
+
+char const*
+wvfo_error_str (int errorno)
+{
+	if (errorno < ERRORE_LAST && errorno >= ERRORE_OK)
+		return error_table[errorno];
+	return error_table[ERRORE_LAST];
+}
+
+size_t
+wvfo_state_row (struct wvfo_parser_t *wvps)
+{
+	if (!wvps) return 0;
+	return wvps->cline;
+}
+
+size_t
+wvfo_state_col (struct wvfo_parser_t *wvps)
+{
+	if (!wvps) return 0;
+	return wvps->point;
 }
 
 struct model_t *
@@ -425,7 +461,6 @@ wvfo_load (struct wvfo_parser_t *wvps, char *buf, size_t bfsz)
 	char last = '0';
 	wvps->state = STATE_ZERO;
 	if (wvps->self != wvps) return NULL;
-	printf ("@ BEGIN %p %u\n", buf, bfsz);
 	while ((r = _get_next_ (buf, bfsz, &offset)) < bfsz && (sz = offset - r) != 0)
 	{
 		last = buf[offset];
@@ -474,7 +509,6 @@ wvfo_load (struct wvfo_parser_t *wvps, char *buf, size_t bfsz)
 		else
 		if (wvps->state < STATE_SEEK && state_table[wvps->state].callback)
 		{
-			//printf ("%3d: %s\n", wvps->cline, state_table[state].name);
 			wvps->errored = state_table[wvps->state].callback (wvps, wvps->point++,\
 				   	&(buf[r]), sz);
 			if (wvps->errored) break;

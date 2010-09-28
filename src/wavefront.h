@@ -91,8 +91,9 @@ void wvfo_zero (struct wvfo_parser_t *wvps);
 struct model_t *wvfo_load (struct wvfo_parser_t *wvps, char *buffer, size_t bfsz);
 // error handle
 int wvfo_error (struct wvfo_parser_t *wvps);
-// fin handle (use after error catch?)
-int wvfo_isfin (struct wvfo_parser_t *wvps);
+size_t wvfo_state_row (struct wvfo_parser_t *wvps);
+size_t wvfo_state_col (struct wvfo_parser_t *wvps);
+char const *wvfo_error_str (int errorno);
 
 #endif // _WaVeFrOnT_h_
 
